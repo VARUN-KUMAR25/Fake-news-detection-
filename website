@@ -1,0 +1,72 @@
+from flask import Flask, request, jsonify, render_template_string
+import joblib
+import re
+import string
+
+app = Flask(__name__)
+
+# Load the trained model and vectorizer
+model = joblib.load("fake_news_model.pkl")
+vectorizer = joblib.load("vectorizer.pkl")
+
+
+
+def preprocess_text(text):
+    text = text.lower()
+    text = re.sub(r"\d+", "", text)  # Use r"..." to avoid SyntaxWarning
+    text = re.sub(r"\s+", " ", text).strip()  # Use raw string for regex
+    return text
+
+# HTML Page (Stored as a string)
+HTML_PAGE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fake News Detection</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin: 50px; }
+        input, textarea { width: 80%; padding: 10px; margin: 10px 0; }
+        button { padding: 10px 20px; background-color: blue; color: white; border: none; cursor: pointer; }
+        button:hover { background-color: darkblue; }
+        #result { font-weight: bold; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Fake News Detection</h1>
+    <textarea id="news_text" placeholder="Enter news content..." rows="5"></textarea><br>
+    <button onclick="predict()">Check News</button>
+    <p id="result"></p>
+
+    <script>
+        function predict() {
+            let newsText = document.getElementById("news_text").value;
+            fetch("/predict", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: "news_text=" + encodeURIComponent(newsText)
+            })
+            .then(response => response.json())
+            .then(data => document.getElementById("result").innerText = "Prediction: " + data.prediction)
+            .catch(error => console.error("Error:", error));
+        }
+    </script>
+</body>
+</html>
+"""
+
+@app.route("/")
+def home():
+    return render_template_string(HTML_PAGE)
+
+@app.route("/predict", methods=["POST"])
+def predict():
+    data = request.form["news_text"]
+    processed_text = preprocess_text(data)
+    transformed_text = vectorizer.transform([processed_text])
+    prediction = model.predict(transformed_text)[0]
+    return jsonify({"prediction": "True News" if prediction == 1 else "Fake News"})
+
+if __name__ == "__main__":
+    app.run(debug=True)
